@@ -1,0 +1,49 @@
+{
+  "name": "layerforge",
+  "version": "0.1.0",
+  "description": "Deterministic headless compositor for layer-manifest product previews.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/m1chlcz/layerforge.git"
+  },
+  "homepage": "https://github.com/m1chlcz/layerforge",
+  "bugs": "https://github.com/m1chlcz/layerforge/issues",
+  "keywords": [
+    "image",
+    "compositor",
+    "sharp",
+    "preview",
+    "layers",
+    "avif",
+    "webp",
+    "product-images",
+    "rendering"
+  ],
+  "bin": {
+    "layerforge": "src/cli.mjs"
+  },
+  "exports": {
+    ".": "./src/index.mjs",
+    "./server": "./src/server.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "benchmark.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test",
+    "benchmark": "node benchmark.mjs"
+  },
+  "dependencies": {
+    "seamless-texture": "0.1.0",
+    "sharp": "0.35.4"
+  }
+}
