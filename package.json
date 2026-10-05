@@ -44,6 +44,6 @@
   },
   "dependencies": {
     "seamless-texture": "0.1.0",
-    "sharp": "0.35.4"
+    "sharp": "0.35.5"
   }
 }
