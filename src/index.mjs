@@ -1,13 +1,20 @@
 import sharp from "sharp";
 import { displaceMaterialSurface, seamlessMaterialTile } from "seamless-texture/sharp";
 
-const allowedBlends = new Map([
-  ["normal", "over"],
-  ["multiply", "multiply"],
-  ["screen", "screen"],
-  ["overlay", "overlay"],
-  ["destination_in", "dest-in"],
-]);
+import {
+  DEFAULT_ASSET_PREFIXES,
+  allowedBlends,
+  maxDimension,
+  maxPixels,
+  normalizeLayerManifest,
+  safeAssetPath,
+} from "./manifest.mjs";
+
+export {
+  DEFAULT_ASSET_PREFIXES,
+  normalizeLayerManifest,
+  validateLayerManifest,
+} from "./manifest.mjs";
 
 export const previewArtifactSpecs = Object.freeze([
   Object.freeze({ role: "card", mimeType: "image/avif", width: 320, height: 320 }),
@@ -18,14 +25,6 @@ export const previewArtifactSpecs = Object.freeze([
   Object.freeze({ role: "zoom", mimeType: "image/webp", width: 1600, height: 1600 }),
 ]);
 
-export const DEFAULT_ASSET_PREFIXES = Object.freeze(["/media/", "/cad/"]);
-
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const tokenPattern = /^[a-z][a-z0-9_]{0,62}$/;
-const hashPattern = /^[0-9a-f]{64}$/i;
-const colorPattern = /^#[0-9a-f]{6}(?:[0-9a-f]{2})?$/i;
-const maxDimension = 6000;
-const maxPixels = 16_000_000;
 const maxAssetBytes = 16 * 1024 * 1024;
 const maxCachedBytes = 32 * 1024 * 1024;
 
@@ -34,145 +33,6 @@ async function timed(options, stage, details, operation) {
   const result = await operation();
   options.onTiming?.({ stage, ...details, duration_ms: Math.round(performance.now() - started) });
   return result;
-}
-
-function integer(value, minimum, maximum, label) {
-  if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
-    throw new Error(`invalid ${label}`);
-  }
-  return value;
-}
-
-function safeAssetPath(value, assetPrefixes) {
-  if (typeof value !== "string" || value.includes("\\") || value.includes("%")) return false;
-  let parsed;
-  try {
-    parsed = new URL(value, "http://preview.invalid");
-  } catch {
-    return false;
-  }
-  return parsed.origin === "http://preview.invalid" &&
-    parsed.pathname === value &&
-    !parsed.search &&
-    !parsed.hash &&
-    !parsed.pathname.split("/").includes("..") &&
-    assetPrefixes.some((prefix) => parsed.pathname.startsWith(prefix));
-}
-
-function optionalAsset(path, contentHash, label, assetPrefixes) {
-  if (path === null && contentHash === null) return;
-  if (!safeAssetPath(path, assetPrefixes) || typeof contentHash !== "string" || !hashPattern.test(contentHash)) {
-    throw new Error(`invalid ${label}`);
-  }
-}
-
-function materialTextureScale(candidate) {
-  const value = candidate.material_texture_scale_millionths;
-  if (candidate.material_texture_path === null) {
-    if (value === undefined || value === null || value === 0) return 1_000_000;
-    throw new Error("invalid material texture scale");
-  }
-  return integer(value ?? 1_000_000, 100_000, 8_000_000, "material texture scale");
-}
-
-function normalizeLayer(candidate, assetPrefixes) {
-  if (candidate?.material_color_hex && !colorPattern.test(candidate.material_color_hex)) {
-    throw new Error("invalid material color");
-  }
-  if (candidate?.material_texture_surface !== undefined &&
-      (typeof candidate.material_texture_surface !== "boolean" ||
-       (candidate.material_texture_surface && !candidate.material_texture_path))) {
-    throw new Error("invalid material texture surface");
-  }
-  if (!candidate || typeof candidate !== "object" ||
-      !uuidPattern.test(candidate.id) ||
-      !tokenPattern.test(candidate.layer_key) ||
-      !tokenPattern.test(candidate.role) ||
-      !safeAssetPath(candidate.path, assetPrefixes) ||
-      !hashPattern.test(candidate.content_hash) ||
-      !allowedBlends.has(candidate.blend_mode)) {
-    throw new Error("invalid layer");
-  }
-  if (candidate.shape_profile !== undefined && candidate.shape_profile !== null) {
-    if (!tokenPattern.test(candidate.shape_profile)) throw new Error("invalid shape profile");
-    integer(candidate.shape_width_mm, 1, 1000, "shape width");
-  } else if (candidate.shape_width_mm !== undefined && candidate.shape_width_mm !== null) {
-    throw new Error("invalid shape width");
-  }
-  optionalAsset(candidate.mask_path, candidate.mask_content_hash, "mask", assetPrefixes);
-  optionalAsset(
-    candidate.material_texture_path,
-    candidate.material_texture_content_hash,
-    "material texture",
-    assetPrefixes,
-  );
-  return {
-    ...candidate,
-    material_texture_scale_millionths: materialTextureScale(candidate),
-    opacity_basis_points: integer(candidate.opacity_basis_points, 0, 10_000, "opacity"),
-    offset_x_micropixels: integer(
-      candidate.offset_x_micropixels,
-      -10_000_000_000,
-      10_000_000_000,
-      "x offset",
-    ),
-    offset_y_micropixels: integer(
-      candidate.offset_y_micropixels,
-      -10_000_000_000,
-      10_000_000_000,
-      "y offset",
-    ),
-    scale_x_millionths: integer(candidate.scale_x_millionths, 10_000, 100_000_000, "x scale"),
-    scale_y_millionths: integer(candidate.scale_y_millionths, 10_000, 100_000_000, "y scale"),
-    rotation_millidegrees: integer(candidate.rotation_millidegrees, -360_000, 360_000, "rotation"),
-    z_order: integer(candidate.z_order, 0, 1_000_000, "z order"),
-  };
-}
-
-/**
- * validateLayerManifest checks a layers_v2 manifest and returns a normalized
- * copy with layers sorted by z-order. Asset paths must sit under one of
- * options.assetPrefixes.
- */
-export function validateLayerManifest(candidate, options = {}) {
-  const assetPrefixes = options.assetPrefixes ?? DEFAULT_ASSET_PREFIXES;
-  if (!Array.isArray(assetPrefixes) || assetPrefixes.length === 0 ||
-      assetPrefixes.some((prefix) => typeof prefix !== "string" || !prefix.startsWith("/") || !prefix.endsWith("/"))) {
-    throw new Error("invalid asset prefixes");
-  }
-  if (!candidate || typeof candidate !== "object" ||
-      candidate.version !== 2 ||
-      candidate.kind !== "layers_v2" ||
-      !uuidPattern.test(candidate.revision_id) ||
-      !candidate.output ||
-      !colorPattern.test(candidate.output.background)) {
-    throw new Error("invalid layers manifest");
-  }
-  const width = integer(candidate.output.width, 1, maxDimension, "output width");
-  const height = integer(candidate.output.height, 1, maxDimension, "output height");
-  if (width * height > maxPixels) throw new Error("output is too large");
-  if (!Array.isArray(candidate.layers) || candidate.layers.length < 1 || candidate.layers.length > 128) {
-    throw new Error("invalid layer count");
-  }
-  const layers = candidate.layers.map((item) => normalizeLayer(item, assetPrefixes));
-  const ids = new Set();
-  const keys = new Set();
-  for (const layer of layers) {
-    if (ids.has(layer.id) || keys.has(layer.layer_key)) throw new Error("duplicate layer");
-    ids.add(layer.id);
-    keys.add(layer.layer_key);
-  }
-  layers.sort((left, right) =>
-    left.z_order - right.z_order ||
-    left.layer_key.localeCompare(right.layer_key) ||
-    left.id.localeCompare(right.id));
-  return {
-    version: 2,
-    kind: "layers_v2",
-    revision_id: candidate.revision_id,
-    output: { width, height, background: candidate.output.background.toUpperCase() },
-    layers,
-  };
 }
 
 function parseBackground(value) {
@@ -433,7 +293,7 @@ async function renderValidatedLayerManifest(manifest, options = {}) {
  * WebP master. options.shapes maps a shape profile to an async handler.
  */
 export async function renderLayerManifest(candidate, options = {}) {
-  const master = await renderValidatedLayerManifest(validateLayerManifest(candidate, options), options);
+  const master = await renderValidatedLayerManifest(normalizeLayerManifest(candidate, options), options);
   return sharp(master).webp({ lossless: true, effort: 6 }).toBuffer();
 }
 
@@ -442,7 +302,7 @@ export async function renderLayerManifest(candidate, options = {}) {
  * file for each responsive role.
  */
 export async function renderLayerArtifactSet(candidate, options = {}) {
-  const manifest = validateLayerManifest(candidate, options);
+  const manifest = normalizeLayerManifest(candidate, options);
   const master = await timed(options, "master", {}, () => renderValidatedLayerManifest(manifest, options));
   const background = parseBackground(manifest.output.background);
   return Promise.all(previewArtifactSpecs.map(async (spec) => {

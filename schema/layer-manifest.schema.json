@@ -1,0 +1,369 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/M1chlCZ/layerforge/main/schema/layer-manifest.schema.json",
+  "title": "layerforge layers_v2 manifest",
+  "description": "Manifest for the layerforge layered preview renderer. Unknown properties are accepted at every level: the renderer ignores top-level extras and passes layer extras to shape plugins.",
+  "type": "object",
+  "required": ["version", "kind", "revision_id", "output", "layers"],
+  "properties": {
+    "version": {
+      "const": 2
+    },
+    "kind": {
+      "const": "layers_v2"
+    },
+    "revision_id": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "output": {
+      "$ref": "#/$defs/output"
+    },
+    "layers": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": {
+        "$ref": "#/$defs/layer"
+      }
+    }
+  },
+  "$defs": {
+    "output": {
+      "type": "object",
+      "description": "Canvas dimensions and background. Width times height must not exceed 16000000 pixels.",
+      "required": ["width", "height", "background"],
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 6000
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 6000
+        },
+        "background": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?$",
+          "description": "Hex color, #RRGGBB or #RRGGBBAA."
+        }
+      }
+    },
+    "assetPath": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^(?!.*/(?:\\.{1,2})(?:/|$))/(media|cad)/[0-9A-Za-z!$&'()*+,.:;=@_\\[\\]|~/-]*$",
+          "description": "Asset path under /media/ or /cad/ with no query, fragment, encoded characters, backslash, or dot segment."
+        }
+      ]
+    },
+    "assetHash": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{64}$",
+          "description": "SHA-256 hex digest of the asset."
+        }
+      ]
+    },
+    "textureScale": {
+      "type": ["integer", "null"],
+      "description": "Texture scale: 100000 to 8000000 with a texture; only 0 or null without one."
+    },
+    "layer": {
+      "type": "object",
+      "required": [
+        "id",
+        "layer_key",
+        "role",
+        "path",
+        "content_hash",
+        "mask_path",
+        "mask_content_hash",
+        "material_texture_path",
+        "material_texture_content_hash",
+        "blend_mode",
+        "opacity_basis_points",
+        "offset_x_micropixels",
+        "offset_y_micropixels",
+        "scale_x_millionths",
+        "scale_y_millionths",
+        "rotation_millidegrees",
+        "z_order"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+          "description": "Layer identifier; must be unique."
+        },
+        "layer_key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,62}$",
+          "description": "Layer key; must be unique."
+        },
+        "role": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,62}$",
+          "description": "Free-form role token; the renderer does not restrict roles to a fixed list."
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^(?!.*/(?:\\.{1,2})(?:/|$))/(media|cad)/[0-9A-Za-z!$&'()*+,.:;=@_\\[\\]|~/-]*$",
+          "description": "Source image path under /media/ or /cad/."
+        },
+        "content_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{64}$",
+          "description": "SHA-256 hex digest of the source image."
+        },
+        "mask_path": {
+          "$ref": "#/$defs/assetPath"
+        },
+        "mask_content_hash": {
+          "$ref": "#/$defs/assetHash"
+        },
+        "material_texture_path": {
+          "$ref": "#/$defs/assetPath"
+        },
+        "material_texture_content_hash": {
+          "$ref": "#/$defs/assetHash"
+        },
+        "material_color_hex": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?$"
+            },
+            {
+              "enum": [null, "", 0, false]
+            }
+          ],
+          "description": "Solid fill color applied through the source alpha; falsy values are treated as absent."
+        },
+        "material_texture_scale_millionths": {
+          "$ref": "#/$defs/textureScale"
+        },
+        "material_texture_surface": {
+          "type": "boolean",
+          "description": "Apply seamless tiling and relief displacement; requires a material texture."
+        },
+        "shape_profile": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,62}$"
+            }
+          ],
+          "description": "Shape plugin name."
+        },
+        "shape_width_mm": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            }
+          ],
+          "description": "Shape width in millimeters; required with a shape profile."
+        },
+        "blend_mode": {
+          "enum": ["normal", "multiply", "screen", "overlay", "destination_in"]
+        },
+        "opacity_basis_points": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000,
+          "description": "Layer opacity, where 10000 is opaque."
+        },
+        "offset_x_micropixels": {
+          "type": "integer",
+          "minimum": -10000000000,
+          "maximum": 10000000000,
+          "description": "Center offset in millionths of a pixel."
+        },
+        "offset_y_micropixels": {
+          "type": "integer",
+          "minimum": -10000000000,
+          "maximum": 10000000000,
+          "description": "Center offset in millionths of a pixel."
+        },
+        "scale_x_millionths": {
+          "type": "integer",
+          "minimum": 10000,
+          "maximum": 100000000,
+          "description": "Layer scale in millionths."
+        },
+        "scale_y_millionths": {
+          "type": "integer",
+          "minimum": 10000,
+          "maximum": 100000000,
+          "description": "Layer scale in millionths."
+        },
+        "rotation_millidegrees": {
+          "type": "integer",
+          "minimum": -360000,
+          "maximum": 360000,
+          "description": "Rotation in thousandths of a degree."
+        },
+        "z_order": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000,
+          "description": "Draw order. Ties are resolved by layer_key, then id."
+        }
+      },
+      "allOf": [
+        {
+          "anyOf": [
+            {
+              "properties": {
+                "mask_path": {
+                  "type": "null"
+                },
+                "mask_content_hash": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "properties": {
+                "mask_path": {
+                  "type": "string",
+                  "pattern": "^(?!.*/(?:\\.{1,2})(?:/|$))/(media|cad)/[0-9A-Za-z!$&'()*+,.:;=@_\\[\\]|~/-]*$"
+                },
+                "mask_content_hash": {
+                  "type": "string",
+                  "pattern": "^[0-9a-fA-F]{64}$"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "anyOf": [
+            {
+              "properties": {
+                "material_texture_path": {
+                  "type": "null"
+                },
+                "material_texture_content_hash": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "properties": {
+                "material_texture_path": {
+                  "type": "string",
+                  "pattern": "^(?!.*/(?:\\.{1,2})(?:/|$))/(media|cad)/[0-9A-Za-z!$&'()*+,.:;=@_\\[\\]|~/-]*$"
+                },
+                "material_texture_content_hash": {
+                  "type": "string",
+                  "pattern": "^[0-9a-fA-F]{64}$"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "if": {
+            "required": ["shape_profile"],
+            "properties": {
+              "shape_profile": {
+                "type": "string"
+              }
+            }
+          },
+          "then": {
+            "required": ["shape_width_mm"],
+            "properties": {
+              "shape_width_mm": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["shape_width_mm"],
+            "properties": {
+              "shape_width_mm": {
+                "type": "integer"
+              }
+            }
+          },
+          "then": {
+            "required": ["shape_profile"],
+            "properties": {
+              "shape_profile": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["material_texture_surface"],
+            "properties": {
+              "material_texture_surface": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "required": ["material_texture_path"],
+            "properties": {
+              "material_texture_path": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["material_texture_path"],
+            "properties": {
+              "material_texture_path": {
+                "type": "null"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "material_texture_scale_millionths": {
+                "enum": [0, null]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "material_texture_scale_millionths": {
+                "type": ["integer", "null"],
+                "minimum": 100000,
+                "maximum": 8000000
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

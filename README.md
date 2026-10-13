@@ -49,6 +49,10 @@ const artifacts = await renderLayerArtifactSet(manifest, {
       "role": "base",
       "path": "/media/base.png",
       "content_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "mask_path": null,
+      "mask_content_hash": null,
+      "material_texture_path": null,
+      "material_texture_content_hash": null,
       "blend_mode": "normal",
       "opacity_basis_points": 10000,
       "offset_x_micropixels": 0,
@@ -67,9 +71,9 @@ const artifacts = await renderLayerArtifactSet(manifest, {
 | `id`, `layer_key`, `role` | Identity. IDs and keys must be unique. |
 | `path`, `content_hash` | Source image. The SHA-256 hash is a 64-character hex string. |
 | `blend_mode` | `normal`, `multiply`, `screen`, `overlay`, or `destination_in`. |
-| `mask_path`, `mask_content_hash` | Optional alpha mask, resized to the layer. |
+| `mask_path`, `mask_content_hash` | Optional alpha mask, resized to the layer. Set both to `null` when absent. |
 | `material_color_hex` | Optional solid fill through the source alpha. |
-| `material_texture_path`, `material_texture_content_hash` | Optional tiled texture. |
+| `material_texture_path`, `material_texture_content_hash` | Optional tiled texture. Set both to `null` when absent. |
 | `material_texture_surface` | Apply seamless tiling and relief displacement. |
 | `material_texture_scale_millionths` | Texture scale, 100000 to 8000000. |
 | `shape_profile`, `shape_width_mm` | Optional shape plugin and its width. |
@@ -77,9 +81,44 @@ const artifacts = await renderLayerArtifactSet(manifest, {
 | `offset_x_micropixels`, `offset_y_micropixels` | Center offset in millionths of a pixel. |
 | `scale_x_millionths`, `scale_y_millionths` | Layer scale in millionths. |
 | `rotation_millidegrees` | Rotation in thousandths of a degree. |
-| `z_order` | Draw order. |
+| `z_order` | Draw order. Ties sort by `layer_key`, then `id`. |
 
 Asset paths must stay under the asset prefixes (`/media/` and `/cad/` by default) and must have no query, fragment, or `..` segment. Set `assetPrefixes` to change the allowed prefixes.
+
+## Validation
+
+`validateLayerManifest` checks a manifest without rendering and reports every problem. Each error has a JSON-pointer-style path and a message:
+
+```js
+import { validateLayerManifest } from "layerforge";
+
+const { valid, errors } = validateLayerManifest(manifest);
+for (const { path, message } of errors) {
+  console.error(`${path}: ${message}`);
+}
+```
+
+`normalizeLayerManifest` applies the same checks and returns the normalized manifest with the layers sorted by `z_order`. It throws an error with one line per problem when the manifest is invalid. A render validates the manifest first, so an invalid manifest fails with the same errors before any asset is loaded.
+
+The CLI checks a file without rendering:
+
+```
+layerforge --validate manifest.json
+```
+
+It prints one `path: message` line per error. The exit code is 0 for a valid manifest, 1 for an invalid manifest, and 2 for a usage error.
+
+`schema/layer-manifest.schema.json` is a JSON Schema draft 2020-12 for the manifest. Editors pick it up through the `$schema` property:
+
+```json
+{
+  "$schema": "./node_modules/layerforge/schema/layer-manifest.schema.json",
+  "version": 2,
+  "kind": "layers_v2"
+}
+```
+
+The published URL is `https://raw.githubusercontent.com/M1chlCZ/layerforge/main/schema/layer-manifest.schema.json`. The schema covers the default asset prefixes (`/media/` and `/cad/`). `validateLayerManifest` also checks the rules JSON Schema cannot express: unique layer `id` and `layer_key` values, the output pixel budget, and custom `assetPrefixes`. Unknown properties are accepted at every level; the renderer ignores top-level extras and passes layer extras to shape plugins.
 
 ## Shape plugins
 
@@ -100,6 +139,7 @@ Pass the module to the library through `shapes`, to the CLI through `--shapes FI
 
 ```
 layerforge render manifest.json --out preview --asset-origin https://shop.example --shapes shapes.mjs
+layerforge --validate manifest.json
 layerforge serve --port 3100 --asset-origin https://shop.example
 ```
 

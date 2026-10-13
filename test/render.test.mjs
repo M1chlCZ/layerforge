@@ -4,6 +4,7 @@ import test from "node:test";
 import sharp from "sharp";
 
 import {
+  normalizeLayerManifest,
   previewArtifactSpecs,
   renderLayerArtifactSet,
   renderLayerManifest,
@@ -251,7 +252,7 @@ test("material texture scale changes motif size without changing layer bounds", 
 });
 
 test("zero texture scale on an untextured layer is neutral", () => {
-  const normalized = validateLayerManifest(manifest([
+  const normalized = normalizeLayerManifest(manifest([
     layer({ material_texture_scale_millionths: 0 }),
   ]));
   assert.equal(normalized.layers[0].material_texture_scale_millionths, 1_000_000);
@@ -263,8 +264,10 @@ test("material texture scale accepts up to eight times", () => {
     material_texture_content_hash: hash,
     material_texture_scale_millionths: scale,
   })]);
-  assert.equal(validateLayerManifest(calibrated(8_000_000)).layers[0].material_texture_scale_millionths, 8_000_000);
-  assert.throws(() => validateLayerManifest(calibrated(8_000_001)), /material texture scale/);
+  assert.equal(normalizeLayerManifest(calibrated(8_000_000)).layers[0].material_texture_scale_millionths, 8_000_000);
+  const result = validateLayerManifest(calibrated(8_000_001));
+  assert.equal(result.valid, false);
+  assert.equal(result.errors[0].path, "/layers/0/material_texture_scale_millionths");
 });
 
 test("a shape plugin reshapes the layer before texturing", async () => {
@@ -293,9 +296,16 @@ test("an unknown shape profile is rejected", async () => {
 });
 
 test("shape width is required and bounded", () => {
-  assert.throws(() => validateLayerManifest(manifest([layer({ shape_profile: "stretch" })])));
-  assert.throws(() => validateLayerManifest(manifest([layer({ shape_profile: "stretch", shape_width_mm: 0 })])));
-  assert.throws(() => validateLayerManifest(manifest([layer({ shape_width_mm: 25 })])));
+  const cases = [
+    layer({ shape_profile: "stretch" }),
+    layer({ shape_profile: "stretch", shape_width_mm: 0 }),
+    layer({ shape_width_mm: 25 }),
+  ];
+  for (const candidate of cases) {
+    const result = validateLayerManifest(manifest([candidate]));
+    assert.equal(result.valid, false);
+    assert.equal(result.errors[0].path, "/layers/0/shape_width_mm");
+  }
 });
 
 test("translate, scale, and rotate are deterministic", async () => {
@@ -356,18 +366,22 @@ test("quarter turns preserve a layer at the dimension budget", async () => {
 
 test("validation rejects unsafe paths, unsupported blends, and oversized output", () => {
   const cases = [
-    manifest([layer({ path: "https://example.test/asset.png" })]),
-    manifest([layer({ path: "/media/../secret.png" })]),
-    manifest([layer({ path: "/private/asset.png" })]),
-    manifest([layer({ blend_mode: "difference" })]),
-    manifest([layer()], { width: 6001, height: 4, background: "#00000000" }),
-    manifest([layer()], { width: 5000, height: 5000, background: "#00000000" }),
+    [manifest([layer({ path: "https://example.test/asset.png" })]), "/layers/0/path"],
+    [manifest([layer({ path: "/media/../secret.png" })]), "/layers/0/path"],
+    [manifest([layer({ path: "/private/asset.png" })]), "/layers/0/path"],
+    [manifest([layer({ blend_mode: "difference" })]), "/layers/0/blend_mode"],
+    [manifest([layer()], { width: 6001, height: 4, background: "#00000000" }), "/output/width"],
+    [manifest([layer()], { width: 5000, height: 5000, background: "#00000000" }), "/output"],
   ];
-  for (const candidate of cases) {
-    assert.throws(() => validateLayerManifest(candidate));
+  for (const [candidate, path] of cases) {
+    const result = validateLayerManifest(candidate);
+    assert.equal(result.valid, false);
+    assert.equal(result.errors[0].path, path);
   }
   const custom = manifest([layer({ path: "/private/asset.png" })]);
-  assert.equal(validateLayerManifest(custom, { assetPrefixes: ["/private/"] }).layers[0].path, "/private/asset.png");
+  const result = validateLayerManifest(custom, { assetPrefixes: ["/private/"] });
+  assert.equal(result.valid, true);
+  assert.equal(normalizeLayerManifest(custom, { assetPrefixes: ["/private/"] }).layers[0].path, "/private/asset.png");
 });
 
 test("responsive artifact set contains matching AVIF and WebP roles", async () => {

@@ -27,12 +27,15 @@
   "exports": {
     ".": "./src/index.mjs",
     "./server": "./src/server.mjs",
+    "./schema/layer-manifest.schema.json": "./schema/layer-manifest.schema.json",
     "./package.json": "./package.json"
   },
   "files": [
     "src",
+    "schema",
     "benchmark.mjs",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "engines": {
@@ -45,5 +48,8 @@
   "dependencies": {
     "seamless-texture": "0.1.0",
     "sharp": "^0.35.5"
+  },
+  "devDependencies": {
+    "ajv": "^8.20.0"
   }
 }
