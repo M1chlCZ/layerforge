@@ -46,7 +46,7 @@
     "benchmark": "node benchmark.mjs"
   },
   "dependencies": {
-    "seamless-texture": "0.1.0",
+    "seamless-texture": "0.2.0",
     "sharp": "^0.35.5"
   },
   "devDependencies": {
